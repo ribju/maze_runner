@@ -1,115 +1,289 @@
-#include <iostream>
-#include <fstream>
-#include <vector>
+#include <stdio.h>
 #include <stack>
+#include <fstream>
+#include <string>
+#include <iostream>
 #include <thread>
-#include <chrono>
+#include <mutex>
+#include <vector>
 
-// Representação do labirinto
-using Maze = std::vector<std::vector<char>>;
 
-// Estrutura para representar uma posição no labirinto
-struct Position {
-    int row;
-    int col;
-};
+bool ready = true;
 
-// Variáveis globais
-Maze maze;
+// Matriz de char representnado o labirinto
+char** maze; // Voce também pode representar o labirinto como um vetor de vetores de char (vector<vector<char>>)
+std::mutex m;
+// Numero de linhas e colunas do labirinto
 int num_rows;
 int num_cols;
-std::stack<Position> valid_positions;
 
-// Função para carregar o labirinto de um arquivo
-Position load_maze(const std::string& file_name) {
-    // TODO: Implemente esta função seguindo estes passos:
-    // 1. Abra o arquivo especificado por file_name usando std::ifstream
-    // 2. Leia o número de linhas e colunas do labirinto
-    // 3. Redimensione a matriz 'maze' de acordo (use maze.resize())
-    // 4. Leia o conteúdo do labirinto do arquivo, caractere por caractere
-    // 5. Encontre e retorne a posição inicial ('e')
-    // 6. Trate possíveis erros (arquivo não encontrado, formato inválido, etc.)
-    // 7. Feche o arquivo após a leitura
-    
-    return {-1, -1}; // Placeholder - substitua pelo valor correto
+
+// Representação de uma posição
+struct pos_t {
+	int i;
+	int j;
+};
+
+// Estrutura de dados contendo as próximas
+// posicões a serem exploradas no labirinto
+std::stack<pos_t> valid_positions;
+/* Inserir elemento: 
+
+	 pos_t pos;
+	 pos.i = 1;
+	 pos.j = 3;
+	 valid_positions.push(pos)
+ */
+// Retornar o numero de elementos: 
+//    valid_positions.size();
+// 
+// Retornar o elemento no topo: 
+//  valid_positions.top(); 
+// 
+// Remover o primeiro elemento do vetor: 
+//    valid_positions.pop();
+
+
+// Função que le o labirinto de um arquivo texto, carrega em 
+// memória e retorna a posição inicial
+pos_t load_maze(const char* file_name) {
+	pos_t initial_pos;
+	std::ifstream file(file_name);
+	std::string fline;
+	std::getline(file, fline);
+	int index = fline.find(" ");
+	std::string str = fline.substr(0,index);
+	std::string str1 = fline.substr(index, fline.size());
+	num_rows = stoi(str);
+	num_cols = stoi(str1);
+	maze = new char*[num_rows];
+	for (int i = 0; i < num_rows; ++i){
+    	maze[i] = new char[num_cols];
+	}
+	// Abre o arquivo para leitura (fopen)
+	// Le o numero de linhas e colunas (fscanf) 
+	// e salva em num_rows e num_cols
+
+	// Aloca a matriz maze (malloc)
+	for (int j = 0; j < num_rows; ++j){
+		std::string line;
+		std::getline(file, line);
+		int index=0;
+		for(std::string::iterator it = line.begin(); it != line.end(); ++it) {
+			maze[j][index]=*it;
+			index++;
+		}
+	}
+	file.close();
+	
+	for (int i = 0; i < num_rows; ++i) {
+		for (int j = 0; j < num_cols; ++j) {
+			// Le o valor da linha i+1,j do arquivo e salva na posição maze[i][j]
+			// Se o valor for 'e' salvar o valor em initial_pos
+			if(maze[i][j] == 'e'){
+				initial_pos.i = i;
+				initial_pos.j = j;
+			}
+		}
+	}
+	return initial_pos;
 }
 
-// Função para imprimir o labirinto
+// Função que imprime o labirinto
 void print_maze() {
-    // TODO: Implemente esta função
-    // 1. Percorra a matriz 'maze' usando um loop aninhado
-    // 2. Imprima cada caractere usando std::cout
-    // 3. Adicione uma quebra de linha (std::cout << '\n') ao final de cada linha do labirinto
+	m.lock();
+	//std::this_thread::sleep_for(std::chrono::milliseconds(50));
+	system("clear");
+	for (int i = 0; i < num_rows; ++i) {
+		for (int j = 0; j < num_cols; ++j) {
+			printf("%c", maze[i][j]);
+		}
+		printf("\n");
+	}
+	printf("\n");
+	m.unlock();
+	std::this_thread::sleep_for(std::chrono::milliseconds(50));
 }
 
-// Função para verificar se uma posição é válida
-bool is_valid_position(int row, int col) {
-    // TODO: Implemente esta função
-    // 1. Verifique se a posição está dentro dos limites do labirinto
-    //    (row >= 0 && row < num_rows && col >= 0 && col < num_cols)
-    // 2. Verifique se a posição é um caminho válido (maze[row][col] == 'x')
-    // 3. Retorne true se ambas as condições forem verdadeiras, false caso contrário
-
-    return false; // Placeholder - substitua pela lógica correta
+int check_for_valid_pos(pos_t pos){
+	std::this_thread::sleep_for(std::chrono::milliseconds(10));
+	pos_t next_pos;
+	int possible_path =0;
+	if( pos.i+2 <= num_rows && ((maze[pos.i+1][pos.j]=='x' || maze[pos.i+1][pos.j]=='s'))){
+		next_pos.i = pos.i + 1;
+		next_pos.j = pos.j;
+		valid_positions.push(next_pos);	
+		possible_path++;
+	}
+		
+	if(pos.i-1 >= 0 && ((maze[pos.i-1][pos.j]=='x' || maze[pos.i-1][pos.j]=='s'))){
+		next_pos.i = pos.i - 1;
+		next_pos.j = pos.j;
+		valid_positions.push(next_pos);	
+		possible_path++;
+	}
+	if(pos.j + 2 <= num_cols && ((maze[pos.i][pos.j + 1]=='x' || maze[pos.i][pos.j + 1]=='s'))){
+		next_pos.i = pos.i;
+		next_pos.j = pos.j + 1;
+		valid_positions.push(next_pos);	
+		possible_path++;
+	}
+	if(pos.j -1 >= 0  && ((maze[pos.i][pos.j - 1]=='x' || maze[pos.i][pos.j - 1]=='s'))){
+		next_pos.i = pos.i;
+		next_pos.j = pos.j - 1;
+		valid_positions.push(next_pos);	
+		possible_path++;
+	}
+	
+	return possible_path;
+	
 }
 
-// Função principal para navegar pelo labirinto
-bool walk(Position pos) {
-    // TODO: Implemente a lógica de navegação aqui
-    // 1. Marque a posição atual como visitada (maze[pos.row][pos.col] = '.')
-    // 2. Chame print_maze() para mostrar o estado atual do labirinto
-    // 3. Adicione um pequeno atraso para visualização:
-    //    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    // 4. Verifique se a posição atual é a saída (maze[pos.row][pos.col] == 's')
-    //    Se for, retorne true
-    // 5. Verifique as posições adjacentes (cima, baixo, esquerda, direita)
-    //    Para cada posição adjacente:
-    //    a. Se for uma posição válida (use is_valid_position()), adicione-a à pilha valid_positions
-    // 6. Enquanto houver posições válidas na pilha (!valid_positions.empty()):
-    //    a. Remova a próxima posição da pilha (valid_positions.top() e valid_positions.pop())
-    //    b. Chame walk recursivamente para esta posição
-    //    c. Se walk retornar true, propague o retorno (retorne true)
-    // 7. Se todas as posições foram exploradas sem encontrar a saída, retorne false
-    
-    return false; // Placeholder - substitua pela lógica correta
+bool thread_walk(pos_t pos){
+	int possible_path = check_for_valid_pos(pos);
+	if(possible_path != 0 || maze[pos.i][pos.j] == 's'){
+		if(possible_path > 1 && maze[pos.i][pos.j] != 's'){
+				pos_t cur_pos = pos;
+				maze[cur_pos.i][cur_pos.j ]='.';
+				for(unsigned int i = 0; i < possible_path-1; i++){
+					m.lock();
+					cur_pos = valid_positions.top();
+					valid_positions.pop();
+					std::thread t(thread_walk,cur_pos);
+					std::this_thread::sleep_for(std::chrono::milliseconds(20));
+					t.detach();
+					m.unlock();
+				}
+				m.lock();
+				cur_pos = valid_positions.top();
+				valid_positions.pop();
+				m.unlock();
+				thread_walk(cur_pos);
+		}else{
+
+		
+		if(maze[pos.i][pos.j] == 'x' || maze[pos.i][pos.j] == 'e'){
+			maze[pos.i][pos.j ]='o';
+			print_maze();
+			
+		}
+		if(maze[pos.i][pos.j] == 's'){
+			maze[pos.i][pos.j] = 'o';
+			print_maze();
+			exit(0);
+			return true;
+		}
+		if(!valid_positions.empty() && maze[pos.i][pos.j ]!='.'){
+			pos_t cur_pos = pos;
+			maze[pos.i][pos.j ]='.';
+			m.lock();
+			cur_pos = valid_positions.top();
+			valid_positions.pop();
+			m.unlock();
+			thread_walk(cur_pos);
+			
+		}
+		}
+	}else if(maze[pos.i][pos.j] == 'x'){
+			maze[pos.i][pos.j ]='o';
+			print_maze();
+		}
+
+	
+	return false;
+	
+
+}
+
+
+bool walk(pos_t pos) {
+	int possible_path = check_for_valid_pos(pos);
+	if(maze[pos.i][pos.j] == 'x' || maze[pos.i][pos.j] == 'e'){
+		maze[pos.i][pos.j ]='o';
+		print_maze();
+	}
+	if(maze[pos.i][pos.j] == 's'){
+		maze[pos.i][pos.j] = 'o';
+		print_maze();
+		exit(0);
+		return true;
+	}
+	if(possible_path > 1){
+			pos_t cur_pos = pos;
+			maze[cur_pos.i][cur_pos.j ]='.';
+			for(unsigned int i = 0; i < possible_path-1; i++){
+				cur_pos = valid_positions.top();
+				valid_positions.pop();
+				std::thread t(thread_walk,cur_pos);
+				t.detach();
+				
+			}
+			cur_pos = valid_positions.top();
+			valid_positions.pop();
+			walk(cur_pos);
+			
+			
+	}else if(!valid_positions.empty()){
+		pos_t cur_pos = pos;
+		maze[pos.i][pos.j ]='.';
+		cur_pos = valid_positions.top();
+		valid_positions.pop();
+		walk(cur_pos);
+	}else if(valid_positions.empty() && possible_path ==0 ){
+		return false;
+	}
+	
+
+		
+
+	
+	// Repita até que a saída seja encontrada ou não existam mais posições não exploradas
+		// Marcar a posição atual com o símbolo '.'
+		// Limpa a tela
+		// Imprime o labirinto
+		
+		/* Dado a posição atual, verifica quais sao as próximas posições válidas
+			Checar se as posições abaixo são validas (i>0, i<num_rows, j>0, j <num_cols)
+		 	e se são posições ainda não visitadas (ou seja, caracter 'x') e inserir
+		 	cada uma delas no vetor valid_positions
+		 		- pos.i, pos.j+1
+		 		- pos.i, pos.j-1
+		 		- pos.i+1, pos.j
+		 		- pos.i-1, pos.j
+		 	Caso alguma das posiçÕes validas seja igual a 's', retornar verdadeiro
+	 	*/
+
+		
+	
+		// Verifica se a pilha de posições nao esta vazia 
+		//Caso não esteja, pegar o primeiro valor de  valid_positions, remove-lo e chamar a funçao walk com esse valor
+		// Caso contrario, retornar falso
+		/*
+		if (!valid_positions.empty()) {
+			pos_t next_position = valid_positions.top();
+			valid_positions.pop();
+		}*/
+		return false;
+}
+
+
+// Função responsável pela navegação.
+// Recebe como entrada a posição initial e retorna um booleando indicando se a saída foi encontrada
+
+void free_memory(){
+	for (int i = 0; i < num_rows; ++i){
+    	delete [] maze[i];
+	}
+delete [] maze;
 }
 
 int main(int argc, char* argv[]) {
-    if (argc != 2) {
-        std::cerr << "Uso: " << argv[0] << " <arquivo_labirinto>" << std::endl;
-        return 1;
-    }
-
-    Position initial_pos = load_maze(argv[1]);
-    if (initial_pos.row == -1 || initial_pos.col == -1) {
-        std::cerr << "Posição inicial não encontrada no labirinto." << std::endl;
-        return 1;
-    }
-
-    bool exit_found = walk(initial_pos);
-
-    if (exit_found) {
-        std::cout << "Saída encontrada!" << std::endl;
-    } else {
-        std::cout << "Não foi possível encontrar a saída." << std::endl;
-    }
-
-    return 0;
+	// carregar o labirinto com o nome do arquivo recebido como argumento
+	pos_t initial_pos = load_maze("../data/maze.txt");
+	// chamar a função de navegação
+	bool exit_found = walk(initial_pos);
+	print_maze();
+	free_memory();
+	// Tratar o retorno (imprimir mensagem)
+	return 0;
 }
-
-// Nota sobre o uso de std::this_thread::sleep_for:
-// 
-// A função std::this_thread::sleep_for é parte da biblioteca <thread> do C++11 e posteriores.
-// Ela permite que você pause a execução do thread atual por um período especificado.
-// 
-// Para usar std::this_thread::sleep_for, você precisa:
-// 1. Incluir as bibliotecas <thread> e <chrono>
-// 2. Usar o namespace std::chrono para as unidades de tempo
-// 
-// Exemplo de uso:
-// std::this_thread::sleep_for(std::chrono::milliseconds(50));
-// 
-// Isso pausará a execução por 50 milissegundos.
-// 
-// Você pode ajustar o tempo de pausa conforme necessário para uma melhor visualização
-// do processo de exploração do labirinto.
